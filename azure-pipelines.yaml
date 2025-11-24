@@ -28,7 +28,7 @@ steps:
     fetchDepth: 0
 
   - script: git clean -fdx
-    displayName: 'Clean Workspace (Git)'
+    displayName: 'Clean Workspace'
 
   - script: |
       echo "Triggering ref: $(Build.SourceBranch)"
@@ -53,6 +53,14 @@ steps:
       includeNuGetOrg: true
 
   - task: DotNetCoreCLI@2
+    displayName: 'Build Project'
+    inputs:
+      command: 'build'
+      projects: 'Minio/Minio.csproj'
+      configuration: $(buildConfiguration)
+      arguments: '--no-restore /t:Rebuild'
+
+  - task: DotNetCoreCLI@2
     displayName: 'Pack NuGet'
     inputs:
       command: 'pack'
@@ -60,7 +68,7 @@ steps:
       configuration: $(buildConfiguration)
       versioningScheme: 'byEnvVar'
       versionEnvVar: 'NUGET_VERSION'
-      arguments: '--no-restore /t:Rebuild'
+      nobuild: true
 
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
