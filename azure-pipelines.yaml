@@ -41,11 +41,11 @@ steps:
     displayName: 'Authenticate to Azure Artifacts'
 
   - task: DotNetCoreCLI@2
-    displayName: 'Build Project'
+    displayName: 'Restore Dependencies'
     inputs:
-      command: 'build'
+      command: 'restore'
       projects: '**/*.csproj'
-      configuration: $(buildConfiguration)
+      feedsToUse: 'config' 
 
   - task: DotNetCoreCLI@2
     displayName: 'Pack NuGet'
@@ -55,7 +55,6 @@ steps:
       configuration: $(buildConfiguration)
       versioningScheme: 'byEnvVar'
       versionEnvVar: 'NUGET_VERSION'
-      nobuild: true
 
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
