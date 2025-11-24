@@ -41,13 +41,21 @@ steps:
     displayName: 'Authenticate to Azure Artifacts'
 
   - task: DotNetCoreCLI@2
-    displayName: 'Build & Pack NuGet'
+    displayName: 'Build Project'
+    inputs:
+      command: 'build'
+      projects: '**/*.csproj'
+      configuration: $(buildConfiguration)
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Pack NuGet'
     inputs:
       command: 'pack'
       packagesToPack: '**/*.csproj'
       configuration: $(buildConfiguration)
       versioningScheme: 'byEnvVar'
       versionEnvVar: 'NUGET_VERSION'
+      nobuild: true
 
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
