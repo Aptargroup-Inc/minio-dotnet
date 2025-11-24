@@ -63,12 +63,10 @@ steps:
     displayName: 'Pack NuGet'
     inputs:
       command: 'pack'
-      # ⚠️ CHANGE THIS: Stop packing Tests/Examples
       projects: 'Minio/Minio.csproj' 
       configuration: $(buildConfiguration)
       versioningScheme: 'byEnvVar'
       versionEnvVar: 'NUGET_VERSION'
-      # We trust the Rebuild from Step 4
       nobuild: true
 
   - task: DotNetCoreCLI@2
