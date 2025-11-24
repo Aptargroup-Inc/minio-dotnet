@@ -1,0 +1,77 @@
+trigger:
+  tags:
+    include:
+      - v*
+  branches:
+    include:
+      - master
+
+resources:
+  repositories:
+    - repository: minioRepo
+      type: github
+      name: Aptargroup-Inc/minio-dotnet
+      endpoint: GitHubConnection
+      ref: refs/heads/master
+
+resources:
+  containers:
+    - container: dotnet_container
+      image: mcr.microsoft.com/dotnet/sdk:8.0
+
+pool:
+  name: "CP Pool"
+
+container: dotnet_container
+
+variables:
+  - name: buildConfiguration
+    value: 'Release'
+  - name: feedName
+    value: 'Minio-Feed'
+
+steps:
+  # STEP 1: Checkout the code from GitHub
+  - checkout: minioRepo
+    fetchDepth: 0
+
+  # STEP 2: Extract Version from the Tag (e.g., v2.0.1 -> 2.0.1)
+  - script: |
+      echo "Triggering Branch/Tag: $(Build.SourceBranchName)"
+      
+      # Logic: If triggered by tag 'v2.0.1', strip 'v'. If not a tag, default to 1.0.0-dev
+      if [[ "$(Build.SourceBranch)" =~ ^refs/tags/v ]]; then
+        CLEAN_VERSION=$(echo $(Build.SourceBranchName) | sed 's/^v//')
+      else
+        CLEAN_VERSION="1.0.0-dev-$(Build.BuildId)"
+      fi
+      
+      echo "Detected Version: $CLEAN_VERSION"
+      echo "##vso[task.setvariable variable=NUGET_VERSION]$CLEAN_VERSION"
+    displayName: 'Calculate Version'
+
+  # STEP 3: Authenticate (Modern Secure Way)
+  - task: NuGetAuthenticate@1
+    displayName: 'Authenticate to Azure Artifacts'
+
+  # STEP 4: Build & Pack
+  - task: DotNetCoreCLI@2
+    displayName: 'Build & Pack NuGet'
+    inputs:
+      command: 'pack'
+      # Finds all .csproj files in the repo automatically
+      packagesToPack: '**/*.csproj' 
+      configuration: $(buildConfiguration)
+      # Injects the version we calculated in Step 2
+      versioningScheme: 'byEnvVar'
+      versionEnvVar: 'NUGET_VERSION'
+
+  # STEP 5: Push to Your Private Azure Feed
+  - task: DotNetCoreCLI@2
+    displayName: 'Push to Azure Artifacts'
+    inputs:
+      command: 'push'
+      packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
+      # Format must be: ProjectName/FeedName
+      publishVstsFeed: '$(System.TeamProject)/$(feedName)'
+      allowPackageConflicts: true
