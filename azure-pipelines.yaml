@@ -28,6 +28,11 @@ steps:
     fetchDepth: 0
 
   - script: |
+      echo "Cleaning bin and obj folders..."
+      find . -type d -name "bin" -o -name "obj" | xargs rm -rf
+    displayName: 'Clean Workspace'
+
+  - script: |
       echo "Triggering ref: $(Build.SourceBranch)"
       if [[ "$(Build.SourceBranch)" =~ ^refs/tags/v ]]; then
         CLEAN_VERSION=$(echo $(Build.SourceBranchName) | sed 's/^v//')
@@ -44,30 +49,20 @@ steps:
     displayName: 'Restore Dependencies'
     inputs:
       command: 'restore'
-      # ⚠️ TARGET SPECIFIC PROJECT
-      projects: 'Minio/Minio.csproj' 
+      projects: 'Minio/Minio.csproj'
       feedsToUse: 'select'
       vstsFeed: '$(System.TeamProject)/$(feedName)'
       includeNuGetOrg: true
 
   - task: DotNetCoreCLI@2
-    displayName: 'Build Project'
-    inputs:
-      command: 'build'
-      projects: 'Minio/Minio.csproj'
-      configuration: $(buildConfiguration)
-      # ⚠️ CRITICAL ARGUMENTS:
-      arguments: '--no-restore /t:Rebuild'
-
-  - task: DotNetCoreCLI@2
     displayName: 'Pack NuGet'
     inputs:
       command: 'pack'
-      projects: 'Minio/Minio.csproj' 
+      projects: 'Minio/Minio.csproj'
       configuration: $(buildConfiguration)
       versioningScheme: 'byEnvVar'
       versionEnvVar: 'NUGET_VERSION'
-      nobuild: true
+      arguments: '--no-restore'
 
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
