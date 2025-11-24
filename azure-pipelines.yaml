@@ -63,11 +63,13 @@ steps:
     displayName: 'Pack NuGet'
     inputs:
       command: 'pack'
-      projects: 'Minio/Minio.csproj'
+      # ⚠️ CHANGE THIS: Stop packing Tests/Examples
+      projects: 'Minio/Minio.csproj' 
       configuration: $(buildConfiguration)
       versioningScheme: 'byEnvVar'
       versionEnvVar: 'NUGET_VERSION'
-      nobuild: true 
+      # We trust the Rebuild from Step 4
+      nobuild: true
 
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
