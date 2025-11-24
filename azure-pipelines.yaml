@@ -40,12 +40,14 @@ steps:
   - task: NuGetAuthenticate@1
     displayName: 'Authenticate to Azure Artifacts'
 
-  - task: DotNetCoreCLI@2
+- task: DotNetCoreCLI@2
     displayName: 'Restore Dependencies'
     inputs:
       command: 'restore'
       projects: '**/*.csproj'
-      feedsToUse: 'config' 
+      feedsToUse: 'select'
+      vstsFeed: '$(System.TeamProject)/$(feedName)' 
+      includeNuGetOrg: true
 
   - task: DotNetCoreCLI@2
     displayName: 'Pack NuGet'
