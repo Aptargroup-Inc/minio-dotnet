@@ -44,20 +44,30 @@ steps:
     displayName: 'Restore Dependencies'
     inputs:
       command: 'restore'
-      projects: '**/*.csproj'
+      # ⚠️ TARGET SPECIFIC PROJECT
+      projects: 'Minio/Minio.csproj' 
       feedsToUse: 'select'
       vstsFeed: '$(System.TeamProject)/$(feedName)'
       includeNuGetOrg: true
 
   - task: DotNetCoreCLI@2
+    displayName: 'Build Project'
+    inputs:
+      command: 'build'
+      projects: 'Minio/Minio.csproj'
+      configuration: $(buildConfiguration)
+      # ⚠️ CRITICAL ARGUMENTS:
+      arguments: '--no-restore /t:Rebuild'
+
+  - task: DotNetCoreCLI@2
     displayName: 'Pack NuGet'
     inputs:
       command: 'pack'
-      packagesToPack: '**/*.csproj'
+      projects: 'Minio/Minio.csproj'
       configuration: $(buildConfiguration)
       versioningScheme: 'byEnvVar'
       versionEnvVar: 'NUGET_VERSION'
-      arguments: '--no-restore'
+      nobuild: true 
 
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
