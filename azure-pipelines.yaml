@@ -7,8 +7,15 @@ trigger:
       - master
       - feature/*
 
+resources:
+  containers:
+    - container: dotnet_container
+      image: mcr.microsoft.com/dotnet/sdk:8.0
+
 pool:
   name: "CP Pool"
+
+container: dotnet_container
 
 variables:
   - name: buildConfiguration
@@ -22,16 +29,11 @@ steps:
 
   - script: |
       echo "Triggering ref: $(Build.SourceBranch)"
-      
-      # Logic: If triggered by tag 'v2.0.1', strip 'v'.
       if [[ "$(Build.SourceBranch)" =~ ^refs/tags/v ]]; then
         CLEAN_VERSION=$(echo $(Build.SourceBranchName) | sed 's/^v//')
       else
-        # Fallback for branches
         CLEAN_VERSION="1.0.0-dev-$(Build.BuildId)"
       fi
-      
-      echo "Detected Version: $CLEAN_VERSION"
       echo "##vso[task.setvariable variable=NUGET_VERSION]$CLEAN_VERSION"
     displayName: 'Calculate Version'
 
