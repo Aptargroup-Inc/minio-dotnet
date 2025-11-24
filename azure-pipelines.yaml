@@ -27,10 +27,8 @@ steps:
   - checkout: self
     fetchDepth: 0
 
-  - script: |
-      echo "Cleaning bin and obj folders..."
-      find . -type d -name "bin" -o -name "obj" | xargs rm -rf
-    displayName: 'Clean Workspace'
+  - script: git clean -fdx
+    displayName: 'Clean Workspace (Git)'
 
   - script: |
       echo "Triggering ref: $(Build.SourceBranch)"
@@ -62,10 +60,8 @@ steps:
       configuration: $(buildConfiguration)
       versioningScheme: 'byEnvVar'
       versionEnvVar: 'NUGET_VERSION'
-      nobuild: false
-      arguments: '--no-restore'
+      arguments: '--no-restore /t:Rebuild'
 
-  # 6. PUSH
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
     inputs:
