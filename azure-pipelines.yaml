@@ -42,6 +42,8 @@ steps:
 
   - task: NuGetAuthenticate@1
     displayName: 'Authenticate to Azure Artifacts'
+    inputs:
+      feedUri: 'https://pkgs.dev.azure.com/AptarCEP/Customer%20Portal/_packaging/$(feedName)/nuget/v3/index.json'
 
   - task: DotNetCoreCLI@2
     displayName: 'Restore Dependencies'
@@ -57,14 +59,6 @@ steps:
       dotnet build Minio/Minio.csproj --configuration $(buildConfiguration) --no-restore --verbosity normal
     displayName: 'Build Project with Script'
 
-  - script: |
-      echo "Listing files in bin/Release directory:"
-      find Minio/bin -type f || echo "No files found in Minio/bin"
-      echo "----------------------------------------------------"
-      echo "Content of Minio.csproj:"
-      cat Minio/Minio.csproj
-    displayName: 'Check Build Output and Project File'
-
   - task: DotNetCoreCLI@2
     displayName: 'Pack NuGet'
     inputs:
@@ -75,7 +69,6 @@ steps:
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
     inputs:
-      command: 'push'
-      packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
-      publishVstsFeed: '$(System.TeamProject)/$(feedName)'
-      allowPackageConflicts: true
+      command: 'custom'
+      custom: 'push'
+      arguments: '$(Build.ArtifactStagingDirectory)/*.nupkg --source https://pkgs.dev.azure.com/AptarCEP/Customer%20Portal/_packaging/$(feedName)/nuget/v3/index.json --api-key AzureArtifacts'
