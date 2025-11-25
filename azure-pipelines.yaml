@@ -58,7 +58,15 @@ steps:
       command: 'build'
       projects: 'Minio/Minio.csproj'
       configuration: $(buildConfiguration)
-      arguments: '--no-restore /t:Rebuild'
+      arguments: '--no-restore'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Publish Project'
+    inputs:
+      command: 'publish'
+      projects: 'Minio/Minio.csproj'
+      configuration: $(buildConfiguration)
+      arguments: '--no-build --output $(Build.ArtifactStagingDirectory)'
 
   - task: DotNetCoreCLI@2
     displayName: 'Pack NuGet'
@@ -69,6 +77,7 @@ steps:
       versioningScheme: 'byEnvVar'
       versionEnvVar: 'NUGET_VERSION'
       nobuild: true
+      outputDir: '$(Build.ArtifactStagingDirectory)'
 
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
