@@ -69,6 +69,6 @@ steps:
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
     inputs:
-      command: 'custom'
-      custom: 'nuget push'
-      arguments: '$(Build.ArtifactStagingDirectory)/*.nupkg --source https://pkgs.dev.azure.com/AptarCEP/Customer%20Portal/_packaging/$(feedName)/nuget/v3/index.json --api-key AzureArtifacts'
+      command: 'push'
+      packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
+      publishVstsFeed: '$(System.TeamProject)/$(feedName)'
