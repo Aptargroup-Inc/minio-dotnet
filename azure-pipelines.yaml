@@ -43,7 +43,7 @@ steps:
   - task: NuGetAuthenticate@1
     displayName: 'Authenticate to Azure Artifacts'
     inputs:
-      feedUri: 'https://pkgs.dev.azure.com/AptarCEP/Customer%20Portal/_packaging/$(feedName)/nuget/v3/index.json'
+      nuGetServiceConnections: 'AzureArtifacts'  # Create this service connection if you don't have it
 
   - task: DotNetCoreCLI@2
     displayName: 'Restore Dependencies'
@@ -66,9 +66,7 @@ steps:
       custom: 'pack'
       arguments: 'Minio/Minio.csproj --configuration $(buildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory) /p:PackageVersion=$(NUGET_VERSION)'
 
-  - task: DotNetCoreCLI@2
+  - script: |
+      echo "Pushing package to Azure Artifacts..."
+      dotnet nuget push $(Build.ArtifactStagingDirectory)/*.nupkg --source https://pkgs.dev.azure.com/AptarCEP/Customer%20Portal/_packaging/$(feedName)/nuget/v3/index.json --api-key AzureArtifacts
     displayName: 'Push to Azure Artifacts'
-    inputs:
-      command: 'push'
-      packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
-      publishVstsFeed: '$(System.TeamProject)/$(feedName)'
