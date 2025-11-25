@@ -65,7 +65,22 @@ steps:
       find Minio/bin/Release -type f || echo "No files found in Minio/bin/Release"
       echo "Listing files in obj/Release directory:"
       find Minio/obj/Release -type f || echo "No files found in Minio/obj/Release"
-    displayName: 'Check Build Output'
+      echo "Listing Minio.csproj content:"
+      cat Minio/Minio.csproj
+    displayName: 'Check Build Output and Project File'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Build Project Again'
+    inputs:
+      command: 'build'
+      projects: 'Minio/Minio.csproj'
+      configuration: $(buildConfiguration)
+      arguments: '--verbosity normal'
+
+  - script: |
+      echo "Listing files in bin/Release directory after second build:"
+      find Minio/bin/Release -type f || echo "No files found in Minio/bin/Release"
+    displayName: 'Check Build Output After Second Build'
 
   - task: DotNetCoreCLI@2
     displayName: 'Pack NuGet'
@@ -73,10 +88,7 @@ steps:
       command: 'pack'
       projects: 'Minio/Minio.csproj'
       configuration: $(buildConfiguration)
-      versioningScheme: 'byEnvVar'
-      versionEnvVar: 'NUGET_VERSION'
-      nobuild: false
-      outputDir: '$(Build.ArtifactStagingDirectory)'
+      arguments: '--no-build --output $(Build.ArtifactStagingDirectory) /p:PackageVersion=$(NUGET_VERSION)'
 
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
