@@ -43,7 +43,7 @@ steps:
   - task: NuGetAuthenticate@1
     displayName: 'Authenticate to Azure Artifacts'
     inputs:
-      nuGetServiceConnections: 'AzureArtifacts'  # Create this service connection if you don't have it
+      nuGetServiceConnections: 'Aptargroup-Inc'
 
   - task: DotNetCoreCLI@2
     displayName: 'Restore Dependencies'
