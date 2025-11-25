@@ -70,5 +70,5 @@ steps:
     displayName: 'Push to Azure Artifacts'
     inputs:
       command: 'custom'
-      custom: 'push'
+      custom: 'nuget push'
       arguments: '$(Build.ArtifactStagingDirectory)/*.nupkg --source https://pkgs.dev.azure.com/AptarCEP/Customer%20Portal/_packaging/$(feedName)/nuget/v3/index.json --api-key AzureArtifacts'
