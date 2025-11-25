@@ -22,6 +22,8 @@ variables:
     value: 'Release'
   - name: feedName
     value: 'Minio-Feed'
+  - name: packageName
+    value: 'Minio.$(NUGET_VERSION).nupkg'
 
 steps:
   - checkout: self
@@ -38,7 +40,8 @@ steps:
         CLEAN_VERSION="1.0.0-dev-$(Build.BuildId)"
       fi
       echo "##vso[task.setvariable variable=NUGET_VERSION]$CLEAN_VERSION"
-    displayName: 'Calculate Version'
+      echo "##vso[task.setvariable variable=packageName]Minio.$CLEAN_VERSION.nupkg"
+    displayName: 'Calculate Version and Package Name'
 
   - task: NuGetAuthenticate@1
     displayName: 'Authenticate to Azure Artifacts'
@@ -66,9 +69,15 @@ steps:
       custom: 'pack'
       arguments: 'Minio/Minio.csproj --configuration $(buildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory) /p:PackageVersion=$(NUGET_VERSION)'
 
+  - script: |
+      echo "Listing all packages in staging directory:"
+      ls -la $(Build.ArtifactStagingDirectory)/*.nupkg
+      echo "Package to push: $(Build.ArtifactStagingDirectory)/$(packageName)"
+    displayName: 'Check Package Names'
+
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
     inputs:
       command: 'push'
-      packagesToPush: '$(Build.ArtifactStagingDirectory)/*.nupkg'
+      packagesToPush: '$(Build.ArtifactStagingDirectory)/$(packageName)'
       publishVstsFeed: '$(System.TeamProject)/$(feedName)'
