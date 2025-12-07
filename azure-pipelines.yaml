@@ -7,7 +7,7 @@ pool:
   name: "CP Pool"
 
 variables:
-  - name: buildConfiguration
+  - name: BuildConfiguration
     value: 'Release'
   - name: feedName
     value: 'backend_libraries'
@@ -50,7 +50,7 @@ steps:
 
   - script: |
       echo "Building Minio.csproj..."
-      dotnet build Minio/Minio.csproj --configuration $(buildConfiguration) --no-restore --verbosity normal
+      dotnet build Minio/Minio.csproj --configuration $(BuildConfiguration) --no-restore --verbosity normal
     displayName: 'Build Project with Script'
 
   - task: NuGetAuthenticate@1
@@ -59,13 +59,21 @@ steps:
     inputs:
       feedUri: 'https://pkgs.dev.azure.com/AptarCEP/Customer%20Portal/_packaging/$(feedName)/nuget/v3/index.json'
 
+  # - task: DotNetCoreCLI@2
+  #   displayName: 'Pack NuGet'
+  #   condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
+  #   inputs:
+  #     command: 'custom'
+  #     custom: 'pack'
+  #     arguments: 'Minio/Minio.csproj --configuration $(BuildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory) /p:PackageVersion=$(NUGET_VERSION)'
   - task: DotNetCoreCLI@2
-    displayName: 'Pack NuGet'
-    condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
     inputs:
-      command: 'custom'
-      custom: 'pack'
-      arguments: 'Minio/Minio.csproj --configuration $(buildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory) /p:PackageVersion=$(NUGET_VERSION)'
+      command: 'pack'
+      packagesToPack: 'Minio/Minio.csproj'
+      nobuild: true
+      versioningScheme: 'off'
+      buildProperties: '/p:PackageVersion=$(NUGET_VERSION)'
+      verbosityPack: 'Detailed'
   
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
