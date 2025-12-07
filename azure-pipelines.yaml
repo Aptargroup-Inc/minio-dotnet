@@ -65,21 +65,13 @@ steps:
     inputs:
       feedUri: 'https://pkgs.dev.azure.com/AptarCEP/Customer%20Portal/_packaging/$(feedName)/nuget/v3/index.json'
 
-  # - task: DotNetCoreCLI@2
-  #   displayName: 'Pack NuGet'
-  #   condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
-  #   inputs:
-  #     command: 'custom'
-  #     custom: 'pack'
-  #     arguments: 'Minio/Minio.csproj --configuration $(BuildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory) /p:PackageVersion=$(NUGET_VERSION)'
   - task: DotNetCoreCLI@2
+    displayName: 'Pack NuGet'
+    condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
     inputs:
-      command: 'pack'
-      packagesToPack: 'Minio/Minio.csproj'
-      nobuild: true
-      versioningScheme: 'off'
-      buildProperties: '/p:PackageVersion=$(NUGET_VERSION)'
-      verbosityPack: 'Detailed'
+      command: 'custom'
+      custom: 'pack'
+      arguments: 'Minio/Minio.csproj --configuration $(BuildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory) /p:PackageVersion=$(NUGET_VERSION)'
   
   - task: DotNetCoreCLI@2
     displayName: 'Push to Azure Artifacts'
