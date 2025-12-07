@@ -1,0 +1,76 @@
+trigger:
+  tags:
+    include:
+      - v*
+
+pool:
+  name: "CP Pool"
+
+variables:
+  - name: BuildConfiguration
+    value: 'Release'
+  - name: feedName
+    value: 'backend_libraries'
+  - name: packageName
+    value: 'Minio.$(NUGET_VERSION).nupkg'
+
+steps:
+  - checkout: self
+    fetchDepth: 0
+
+  - task: UseDotNet@2
+    displayName: 'Use .NET 8 SDK'
+    inputs:
+      packageType: 'sdk'
+      version: '8.0.x'
+      installationPath: $(Agent.ToolsDirectory)/dotnet
+
+  - script: git clean -fdx
+    displayName: 'Clean Workspace'
+
+  - script: |
+      echo "Triggering ref: $(Build.SourceBranch)"
+      if [[ "$(Build.SourceBranch)" =~ ^refs/tags/v ]]; then
+        CLEAN_VERSION=$(echo $(Build.SourceBranchName) | sed 's/^v//')
+      else
+        CLEAN_VERSION="0.0.0-dev-$(Build.BuildId)"
+      fi
+      echo "##vso[task.setvariable variable=NUGET_VERSION]$CLEAN_VERSION"
+      echo "##vso[task.setvariable variable=packageName]Minio.$CLEAN_VERSION.nupkg"
+    displayName: 'Calculate Version and Package Name'
+  
+  - task: DotNetCoreCLI@2
+    displayName: 'Restore Dependencies'
+    inputs:
+      command: 'restore'
+      projects: 'Minio/Minio.csproj'
+      includeNuGetOrg: true
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Build Project'
+    inputs:
+      command: 'build'
+      projects: 'Minio/Minio.csproj'
+      arguments: '--configuration $(BuildConfiguration) --no-restore --verbosity normal'
+
+  - task: NuGetAuthenticate@1
+    displayName: 'Authenticate to Azure Artifacts'
+    condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
+    inputs:
+      feedUri: 'https://pkgs.dev.azure.com/AptarCEP/Customer%20Portal/_packaging/$(feedName)/nuget/v3/index.json'
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Pack NuGet'
+    condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
+    inputs:
+      command: 'custom'
+      custom: 'pack'
+      arguments: 'Minio/Minio.csproj --configuration $(BuildConfiguration) --no-build --output $(Build.ArtifactStagingDirectory) /p:PackageVersion=$(NUGET_VERSION)'
+  
+  - task: DotNetCoreCLI@2
+    displayName: 'Push to Azure Artifacts'
+    condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/v')
+    inputs:
+      command: 'push'
+      packagesToPush: '$(Build.ArtifactStagingDirectory)/$(packageName)'
+      publishVstsFeed: '$(System.TeamProject)/$(feedName)'
