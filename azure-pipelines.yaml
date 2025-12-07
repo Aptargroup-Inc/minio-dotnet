@@ -44,13 +44,7 @@ steps:
     inputs:
       command: 'restore'
       projects: 'Minio/Minio.csproj'
-      # feedsToUse: 'select'
-      # vstsFeed: '$(System.TeamProject)/$(feedName)'
       includeNuGetOrg: true
-
-  # - script: |
-  #     echo "Building Minio.csproj..."
-  #     dotnet build Minio/Minio.csproj - task: DotNetCoreCLI@2
 
   - task: DotNetCoreCLI@2
     displayName: 'Build Project'
