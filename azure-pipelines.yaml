@@ -48,10 +48,16 @@ steps:
       # vstsFeed: '$(System.TeamProject)/$(feedName)'
       includeNuGetOrg: true
 
-  - script: |
-      echo "Building Minio.csproj..."
-      dotnet build Minio/Minio.csproj --configuration $(BuildConfiguration) --no-restore --verbosity normal
-    displayName: 'Build Project with Script'
+  # - script: |
+  #     echo "Building Minio.csproj..."
+  #     dotnet build Minio/Minio.csproj - task: DotNetCoreCLI@2
+
+  - task: DotNetCoreCLI@2
+    displayName: 'Build Project'
+    inputs:
+      command: 'build'
+      projects: 'Minio/Minio.csproj'
+      arguments: '--configuration $(BuildConfiguration) --no-restore --verbosity normal'
 
   - task: NuGetAuthenticate@1
     displayName: 'Authenticate to Azure Artifacts'
