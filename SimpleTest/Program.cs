@@ -28,7 +28,7 @@ public static class Program
     // Replace with your Azure Blob Storage connection string
     // NOTE: For ListBuckets to work, your SAS token must include service-level permissions (srt=sco)
     // If you only have container/object permissions (srt=co), ListBuckets will fail but other tests will work
-    private const string ConnectionString = "BlobEndpoint=https://aptarpoc.blob.core.windows.net/;QueueEndpoint=https://aptarpoc.queue.core.windows.net/;FileEndpoint=https://aptarpoc.file.core.windows.net/;TableEndpoint=https://aptarpoc.table.core.windows.net/;SharedAccessSignature=sv=2024-11-04&ss=bfqt&srt=co&sp=rwdlacupiytfx&se=2025-12-19T01:27:22Z&st=2025-12-11T17:12:22Z&spr=https,http&sig=OmRJdMdglS2I3ZHlGZNAiqkRTeIywz2%2Fy6RptMAizKI%3D";
+    private const string ConnectionString = "";
     
     private const string TestBucketName = "bucket-s3";
     private const string TestObjectName = "object.txt";
