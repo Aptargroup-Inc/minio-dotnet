@@ -5,6 +5,7 @@ using System.Text;
 using Azure.Storage.Blobs;
 using Azure.Storage.Blobs.Models;
 using Azure.Storage.Sas;
+using Microsoft.VisualBasic;
 using Minio.DataModel;
 using Minio.DataModel.Args;
 using Minio.DataModel.Encryption;
@@ -583,9 +584,62 @@ public class AzureBlobClient : IMinioClient
         throw new NotSupportedException();
     }
 
-    public Task<ObjectStat> GetObjectAsync(GetObjectArgs args, CancellationToken cancellationToken = default)
+    public async Task<ObjectStat> GetObjectAsync(GetObjectArgs args, CancellationToken cancellationToken = default)
     {
-        throw new NotSupportedException();
+        args?.Validate();
+
+        // Check if bucket exists
+        if (!await BucketExistsAsync(new BucketExistsArgs().WithBucket(args.BucketName), cancellationToken).ConfigureAwait(false))
+            throw new BucketNotFoundException(args.BucketName, $"Bucket \"{args.BucketName}\" is not found");
+
+        var containerClient = blobServiceClient.GetBlobContainerClient(args.BucketName);
+        var blobClient = containerClient.GetBlobClient(args.ObjectName);
+
+        // Remove leading slash if present (Azure Blob Storage doesn't use leading slashes)
+        var objectName = args.ObjectName.StartsWith("/", StringComparison.OrdinalIgnoreCase) ? args.ObjectName[1..] : args.ObjectName;
+
+        // Check if object exists
+        if (!await blobClient.ExistsAsync(cancellationToken).ConfigureAwait(false))
+            throw new ObjectNotFoundException(args.ObjectName, "Object not found");
+
+        // Get object properties for ObjectStat
+        var properties = await blobClient.GetPropertiesAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+
+        // Create ObjectStat (similar to StatObject)
+        var responseHeaders = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "content-length", properties.Value.ContentLength.ToString(CultureInfo.InvariantCulture) },
+            { "etag", properties.Value.ETag.ToString() },
+            { "last-modified", properties.Value.LastModified.UtcDateTime.ToString("R", CultureInfo.InvariantCulture) },
+            { "content-type", properties.Value.ContentType }
+        };
+
+        if (!string.IsNullOrEmpty(properties.Value.VersionId))
+            responseHeaders.Add("x-amz-version-id", properties.Value.VersionId);
+
+        foreach (var metaData in properties.Value.Metadata)
+            responseHeaders.Add($"{MetaElementPrefix}{metaData.Key}", metaData.Value);
+
+        var objectStat = ObjectStat.FromResponseHeaders(args.ObjectName, responseHeaders);
+
+        // Handle callback function if provided
+        if (args.CallBack != null)
+        {
+            // Download the blob and call the callback
+            var downloadResult = await blobClient.DownloadStreamingAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+
+            using (downloadResult.Value.Content)
+            {
+                await args.CallBack(downloadResult.Value.Content, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        // Handle file download if filename is provided
+        else if (!string.IsNullOrEmpty(args.FileName))
+        {
+            _ = await blobClient.DownloadToAsync(args.FileName, cancellationToken).ConfigureAwait(false);
+        }
+
+        return objectStat;
     }
 
     public Task<SelectResponseStream> SelectObjectContentAsync(SelectObjectContentArgs args, CancellationToken cancellationToken = default)
