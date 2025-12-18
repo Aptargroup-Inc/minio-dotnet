@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Net;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -574,14 +574,197 @@ public class AzureBlobClient : IMinioClient
         throw new NotSupportedException();
     }
 
-    public Task<IList<DeleteError>> RemoveObjectsAsync(RemoveObjectsArgs args, CancellationToken cancellationToken = default)
+    public async Task<IList<DeleteError>> RemoveObjectsAsync(RemoveObjectsArgs args, CancellationToken cancellationToken = default)
     {
-        throw new NotSupportedException();
+        if (args == null) throw new ArgumentNullException(nameof(args));
+
+        args.Validate();
+
+        // S3 Standard: Should throw BucketNotFoundException if bucket doesn't exist
+        if (!await BucketExistsAsync(new BucketExistsArgs().WithBucket(args.BucketName), cancellationToken)
+                .ConfigureAwait(false))
+            throw new BucketNotFoundException(args.BucketName, $"Bucket \"{args.BucketName}\" is not found");
+
+        var containerClient = blobServiceClient.GetBlobContainerClient(args.BucketName);
+        var errors = new List<DeleteError>();
+
+        // Handle deletion of objects with versions
+        if (args.ObjectNamesVersions != null && args.ObjectNamesVersions.Count > 0)
+        {
+            foreach (var objVersion in args.ObjectNamesVersions)
+            {
+                try
+                {
+                    var objectName = objVersion.Item1;
+                    var versionId = objVersion.Item2;
+                    
+                    var blobClient = containerClient.GetBlobClient(objectName);
+
+                    if (!string.IsNullOrEmpty(versionId))
+                    {
+                        // Delete specific version
+                        // Check if this is the promoted version and handle accordingly
+                        var latestBlobItem = GetDifferentLatestVersionIfExists(args.BucketName, objectName, versionId);
+                        if (latestBlobItem != null)
+                        {
+                            await PromoteLatestVersionAsync(latestBlobItem.VersionId, blobClient).ConfigureAwait(false);
+                            blobClient = blobClient.WithVersion(versionId);
+                        }
+                        else
+                        {
+                            blobClient = blobClient.WithVersion(versionId);
+                        }
+                    }
+
+                    // S3 Standard: Delete is idempotent - no error if object doesn't exist
+                    _ = await blobClient.DeleteIfExistsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    // Collect errors but continue processing other objects (S3 behavior)
+                    errors.Add(new DeleteError
+                    {
+                        Key = objVersion.Item1,
+                        VersionId = objVersion.Item2,
+                        Code = ex.GetType().Name,
+                        Message = ex.Message
+                    });
+                }
+            }
+        }
+        // Handle deletion of objects without versions
+        else if (args.ObjectNames != null && args.ObjectNames.Count > 0)
+        {
+            foreach (var objectName in args.ObjectNames)
+            {
+                try
+                {
+                    var blobClient = containerClient.GetBlobClient(objectName);
+                    
+                    // S3 Standard: Delete is idempotent - no error if object doesn't exist
+                    _ = await blobClient.DeleteIfExistsAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception ex)
+                {
+                    // Collect errors but continue processing other objects (S3 behavior)
+                    errors.Add(new DeleteError
+                    {
+                        Key = objectName,
+                        Code = ex.GetType().Name,
+                        Message = ex.Message
+                    });
+                }
+            }
+        }
+
+        return errors;
     }
 
-    public Task CopyObjectAsync(CopyObjectArgs args, CancellationToken cancellationToken = default)
+    public async Task CopyObjectAsync(CopyObjectArgs args, CancellationToken cancellationToken = default)
     {
-        throw new NotSupportedException();
+        if (args == null) throw new ArgumentNullException(nameof(args));
+
+        // Get source object stats first (required by args.Validate())
+        if (args.SourceObjectInfo == null && args.SourceObject != null)
+        {
+            var statArgs = new StatObjectArgs()
+                .WithBucket(args.SourceObject.BucketName)
+                .WithObject(args.SourceObject.ObjectName);
+            
+            if (!string.IsNullOrEmpty(args.SourceObject.VersionId))
+                statArgs = statArgs.WithVersionId(args.SourceObject.VersionId);
+
+            var sourceObjectInfo = await StatObjectAsync(statArgs, cancellationToken).ConfigureAwait(false);
+            args = args.WithCopyObjectSourceStats(sourceObjectInfo);
+        }
+
+        args.Validate();
+
+        // S3 Standard: Check if source bucket exists
+        if (!await BucketExistsAsync(new BucketExistsArgs().WithBucket(args.SourceObject.BucketName), cancellationToken)
+                .ConfigureAwait(false))
+            throw new BucketNotFoundException(args.SourceObject.BucketName, 
+                $"Source bucket \"{args.SourceObject.BucketName}\" does not exist");
+
+        // S3 Standard: Check if destination bucket exists
+        if (!await BucketExistsAsync(new BucketExistsArgs().WithBucket(args.BucketName), cancellationToken)
+                .ConfigureAwait(false))
+            throw new BucketNotFoundException(args.BucketName, 
+                $"Destination bucket \"{args.BucketName}\" does not exist");
+
+        // Get source blob client
+        var sourceContainerClient = blobServiceClient.GetBlobContainerClient(args.SourceObject.BucketName);
+        var sourceBlobClient = sourceContainerClient.GetBlobClient(args.SourceObject.ObjectName);
+
+        // Handle version if specified
+        if (!string.IsNullOrEmpty(args.SourceObject.VersionId))
+        {
+            sourceBlobClient = sourceBlobClient.WithVersion(args.SourceObject.VersionId);
+        }
+
+        // Get destination blob client
+        var destContainerClient = blobServiceClient.GetBlobContainerClient(args.BucketName);
+        var destBlobClient = destContainerClient.GetBlobClient(args.ObjectName);
+
+        // Prepare metadata
+        var metadata = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        
+        if (args.ReplaceMetadataDirective && args.Headers != null)
+        {
+            // Use new metadata
+            foreach (var header in args.Headers.Where(h => 
+                h.Key.StartsWith(MetaElementPrefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                var key = header.Key[MetaElementPrefix.Length..];
+                metadata[key] = header.Value;
+            }
+        }
+        else if (!args.ReplaceMetadataDirective && args.SourceObjectInfo?.MetaData != null)
+        {
+            // Copy existing metadata
+            foreach (var meta in args.SourceObjectInfo.MetaData.Where(m => 
+                m.Key.StartsWith(MetaElementPrefix, StringComparison.OrdinalIgnoreCase)))
+            {
+                var key = meta.Key[MetaElementPrefix.Length..];
+                metadata[key] = meta.Value;
+            }
+        }
+
+        // Start copy operation
+        var copyOperation = await destBlobClient.StartCopyFromUriAsync(
+            sourceBlobClient.Uri, 
+            metadata: metadata.Count > 0 ? metadata : null,
+            cancellationToken: cancellationToken
+        ).ConfigureAwait(false);
+
+        // Wait for copy to complete (Azure blob copy is async)
+        // Poll until copy is complete
+        var properties = await destBlobClient.GetPropertiesAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        
+        while (properties.Value.CopyStatus == CopyStatus.Pending)
+        {
+            await Task.Delay(100, cancellationToken).ConfigureAwait(false);
+            properties = await destBlobClient.GetPropertiesAsync(cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
+
+        // Check if copy succeeded
+        if (properties.Value.CopyStatus != CopyStatus.Success)
+        {
+            throw new InvalidOperationException(
+                $"Copy operation failed with status: {properties.Value.CopyStatus}. " +
+                $"Status description: {properties.Value.CopyStatusDescription}");
+        }
+
+        // Handle tags if specified
+        if (args.ObjectTags != null && args.ObjectTags.Tags.Count > 0)
+        {
+            var tags = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var tag in args.ObjectTags.Tags)
+            {
+                tags[tag.Key] = tag.Value;
+            }
+            _ = await destBlobClient.SetTagsAsync(tags, cancellationToken: cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public async Task<ObjectStat> GetObjectAsync(GetObjectArgs args, CancellationToken cancellationToken = default)
@@ -664,7 +847,49 @@ public class AzureBlobClient : IMinioClient
 
     public Task<string> PresignedPutObjectAsync(PresignedPutObjectArgs args)
     {
-        throw new NotSupportedException();
+        if (args == null) throw new ArgumentNullException(nameof(args));
+
+        args.Validate();
+
+        // S3 object keys should not start with '/', but handle it for compatibility
+        var objectName = args.ObjectName.StartsWith("/", StringComparison.Ordinal) ? args.ObjectName[1..] : args.ObjectName;
+        var containerClient = blobServiceClient.GetBlobContainerClient(args.BucketName);
+        var blobClient = containerClient.GetBlobClient(objectName);
+
+        try
+        {
+            // Try to generate a new SAS URI (requires StorageSharedKeyCredential)
+            // Use Write and Create permissions for PUT operations
+            var sasUri = blobClient.GenerateSasUri(
+                BlobSasPermissions.Write | BlobSasPermissions.Create, 
+                DateTimeOffset.UtcNow.AddSeconds(args.Expiry));
+            return Task.FromResult(sasUri.ToString());
+        }
+        catch (ArgumentNullException ex) when (string.Equals(ex.ParamName, "sharedKeyCredential", StringComparison.Ordinal))
+        {
+            // If authenticated with SAS token (not account key), we cannot generate new SAS tokens
+            // Workaround: Return the blob URL with the existing SAS token from connection string
+            // Note: The expiry will be based on the original SAS token, not the requested expiry
+            
+            // Extract SAS token from connection string
+            var sasToken = ExtractSasTokenFromConnectionString();
+            if (string.IsNullOrEmpty(sasToken))
+            {
+                throw new NotSupportedException(
+                    "Cannot generate presigned URLs when authenticated with SAS token. " +
+                    "To generate presigned URLs, use account key authentication instead of SAS token. " +
+                    "Alternatively, use the existing SAS token URL returned by this method (with original expiry).",
+                    ex);
+            }
+
+            // Return URL with existing SAS token
+            var blobUrl = blobClient.Uri.AbsoluteUri;
+            var urlWithSas = sasToken.StartsWith("?", StringComparison.Ordinal) 
+                ? $"{blobUrl}{sasToken}" 
+                : $"{blobUrl}?{sasToken}";
+            
+            return Task.FromResult(urlWithSas);
+        }
     }
 
     public Task<(Uri, IDictionary<string, string>)> PresignedPostPolicyAsync(PostPolicy policy)
